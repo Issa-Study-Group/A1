@@ -126,7 +126,7 @@ new %>% filter(VISIT == 6)
 
 ```{r}
 new %>% filter(VISIT == 6) %>% arrange(desc(tokens_CHI))
-new %>% filter(VISIT == 1) %>% arrange(tokens_CHI
+new %>% filter(VISIT == 1) %>% arrange(tokens_CHI)
 ```
 
 ## USING SELECT
