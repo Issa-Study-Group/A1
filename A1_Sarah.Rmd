@@ -58,7 +58,7 @@ If you're not in a project in Rstudio, make sure to set your working directory h
 If you created an RStudio project, then your working directory (the directory with your data and code for these assignments) is the project directory.
 
 ```{r}
-pacman::p_load(tidyverse,janitor, stringr)
+pacman::p_load(tidyverse, janitor, stringr)
 ```
 
 Load the three data sets, after downloading them from dropbox and saving them in your working directory:
@@ -166,12 +166,40 @@ Some things to pay attention to:
 * make sure to understand whether (and if so why) there are NAs in the dataset (e.g. some measures were not taken at all visits, some recordings were lost or permission to use was withdrawn)
 
 ```{r}
+# Identify primary keys
 
+DEM %>% 
+  count(SUBJ, VISIT) %>% 
+  filter(n > 1)
+# 0 = primary key
+
+LU %>% 
+  count(SUBJ, VISIT) %>% 
+  filter(n > 1)
+# 0 = primary key
+
+WORD %>% 
+  count(SUBJ, VISIT) %>% 
+  filter(n > 1)
+# 0 = primary key
+```
+
+```{r}
+#class(DEM$VISIT)
+#class(LU$VISIT)
+#class(WORD$VISIT)
+
+DEM$VISIT <- as.character(DEM$VISIT)
+
+LU_WORD <- full_join(LU, WORD, by = c("SUBJ", "VISIT"))
+df <- DEM %>% left_join(LU_WORD, by = c("SUBJ", "VISIT"))
+
+rm(LU_WORD)
 ```
 
 
 2f. Only using clinical measures from Visit 1
-In order for our models to be useful, we want to miimize the need to actually test children as they develop. In other words, we would like to be able to understand and predict the children's linguistic development after only having tested them once. Therefore we need to make sure that our ADOS, MullenRaw, ExpressiveLangRaw and Socialization variables are reporting (for all visits) only the scores from visit 1.
+In order for our models to be useful, we want to minimize the need to actually test children as they develop. In other words, we would like to be able to understand and predict the children's linguistic development after only having tested them once. Therefore we need to make sure that our ADOS, MullenRaw, ExpressiveLangRaw and Socialization variables are reporting (for all visits) only the scores from visit 1.
 
 A possible way to do so:
 * create a new dataset with only visit 1, child id and the 4 relevant clinical variables to be merged with the old dataset
@@ -181,7 +209,15 @@ A possible way to do so:
 
 
 ```{r}
+visit_1 <- df %>% 
+  select(SUBJ, VISIT, ADOS, MullenRaw, ExpressiveLangRaw, Socialization) %>% 
+  filter(VISIT == "1") %>% 
+  rename(ADOS1 = ADOS, MullenRaw1 = MullenRaw, ExpressiveLangRaw1 = ExpressiveLangRaw, Socialization1 = Socialization) %>% 
+  select(SUBJ, ADOS1, MullenRaw1, ExpressiveLangRaw1, Socialization1)
 
+df <- df %>% left_join(visit_1, by = "SUBJ")
+
+rm(visit_1)
 ```
 
 2g. Final touches
@@ -192,7 +228,21 @@ Now we want to
 * Save the data set using into a csv file. Hint: look into write.csv()
 
 ```{r}
+# Anonymize participants 
+dfa <- df
+dfa$SUBJ <- as.factor(dfa$SUBJ)
+dfa$SUBJ <- as.numeric(dfa$SUBJ)
+dfa$SUBJ <- as.factor(dfa$SUBJ)
 
+# Renaming gender
+dfa$Gender <- as.factor(dfa$Gender)
+dfa$Gender <- fct_recode(dfa$Gender, "M" = "1", "F" = "2")
+
+# Renaming diagnosis
+dfa$Diagnosis <- fct_recode(dfa$Diagnosis, "ASD" = "A", "TD" = "B")
+
+# Export as csv
+write.csv(dfa, "p1_df.csv")
 ```
 
 
@@ -208,8 +258,14 @@ List all kids who:
 3. have not completed all trials. Tip: Use pipes to solve this
 
 ```{r}
+# 1
+df %>% filter(CHI_MLU > 2.7)
 
+# 2
+df %>% filter(VISIT == 1 & CHI_MLU < 1.5)
 
+# 3
+df %>% filter(VISIT == 6)
 ```
 
 
@@ -219,8 +275,13 @@ USING ARRANGE
 2. Sort kids to find the kid who produced the least amount of words on the 1st visit.
 
 ```{r}
+# 1
+df %>% filter(VISIT == 6) %>% arrange(desc(tokens_CHI))
+# TC
 
-
+# 2
+df %>% filter(VISIT == 1) %>% arrange(tokens_CHI)
+# Tina
 ```
 
 USING SELECT
@@ -229,7 +290,15 @@ USING SELECT
 2. What happens if you include the name of a variable multiple times in a select() call?
 
 ```{r}
+# 1
+select_1 <- dfa %>% 
+  filter(Diagnosis == "ASD") %>% 
+  select(SUBJ, Diagnosis, MOT_MLU, CHI_MLU, tokens_MOT, tokens_CHI)
 
+# 2
+select_2 <- dfa %>% 
+  select(SUBJ, SUBJ)
+# Nothing happens, it only selects the variable once
 ```
 
 
@@ -239,6 +308,13 @@ USING MUTATE, SUMMARISE and PIPES
 3. The solution to task above enables us to assess the average amount of words produced by each child. Why don't we just use these average values to describe the language production of the children? What is the advantage of keeping all the data?
 
 ```{r}
+# 1
+df <- df %>% mutate(oa_mean_MLU = mean(tokens_CHI, na.rm = T))
+
+# 2
+df <- df %>% group_by(SUBJ) %>% mutate(mean_MLU = mean(tokens_CHI, na.rm = T))
+  
+# 3
 
 
 ```
