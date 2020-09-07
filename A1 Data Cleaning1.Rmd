@@ -1,0 +1,168 @@
+---
+title: "Assignment 1 - Data Cleaning, Study Group 7"
+author: "Kristian Severin, Lasse Hansen, Nikolaj Munch & Sarah Nielsen"
+date: "07/09/2020"
+output: html_document
+---
+
+## 2. Now let's take dirty dirty data sets and make them into a tidy one
+
+If you're not in a project in Rstudio, make sure to set your working directory here.
+If you created an RStudio project, then your working directory (the directory with your data and code for these assignments) is the project directory.
+
+```{r}
+pacman::p_load(tidyverse,janitor, stringr)
+```
+
+So instead of downloading all of this data, we are assuming that you have a stable link for it. Therefore we will pull it directly from your github user with the getURL function.
+
+```{r}
+library(RCurl)
+DEM <- read.csv(text=getURL("https://raw.githubusercontent.com/Byurakn/methods3_A1/master/demo_train.csv"))
+LU <- read.csv(text=getURL("https://raw.githubusercontent.com/Byurakn/methods3_A1/master/LU_train.csv"))
+WORD <- read.csv(text=getURL("https://raw.githubusercontent.com/Byurakn/methods3_A1/master/token_train.csv"))
+```
+
+
+## 2a. Identify which variable names do not match (that is are spelled differently) and find a way to transform variable names.
+
+We are going to use the function colnames and then refer to the column we are interested in: 
+
+```{r}
+colnames(DEM)[1] <- "SUBJ"
+colnames(DEM)[2] <- "VISIT"
+```
+
+## 2b. Find a way to homogeneize the way "visit" is reported (visit1 vs. 1).
+
+We use the package stringr to only extract the digit numbers from the columns where they are reported differently than with just a number:
+
+```{r}
+LU$VISIT <- str_extract(LU$VISIT, "\\d")
+WORD$VISIT <- str_extract(WORD$VISIT, "\\d")
+```
+
+## 2c. We also need to make a small adjustment to the content of the Child.ID coloumn in the demographic data. Within this column, names that are not abbreviations do not end with "." (i.e. Adam), which is the case in the other two data sets (i.e. Adam.). If The content of the two variables isn't identical the rows will not be merged.
+
+By using the function str_replace_all we will remove all the dots from the subject column
+
+```{r}
+DEM$SUBJ <- str_replace_all(DEM$SUBJ, "[.]", "")
+LU$SUBJ <- str_replace_all(LU$SUBJ, "[.]", "")
+WORD$SUBJ <- str_replace_all(WORD$SUBJ, "[.]", "")
+```
+
+## 2d. Now that the nitty gritty details of the different data sets are fixed, we want to make a subset of each data set only containig the variables that we wish to use in the final data set.For this we use the tidyverse package dplyr, which contains the function select().
+
+By using the function selects we canchose  the variables that we want in the final dataset
+
+```{r}
+DEM <- DEM %>% select(SUBJ, VISIT, Diagnosis, Ethnicity, Gender, Age, ADOS, MullenRaw, ExpressiveLangRaw, Socialization)
+LU <- LU %>% select(SUBJ, VISIT, MOT_MLU, CHI_MLU)
+WORD <- WORD %>% select(SUBJ, VISIT, types_MOT, types_CHI, tokens_MOT, tokens_CHI)
+```
+
+## 2e. Finally we are ready to merge all the data sets into just one. 
+
+First we are using full_join to join two of the dataframes by subjectand  visit. Then we join the last dataframe with left_join:
+
+```{r}
+combined <- full_join(DEM, LU, by =  c("SUBJ", "VISIT"))
+combined <- left_join(combined, WORD)
+```
+
+
+## 2f. Only using clinical measures from Visit 1
+
+First we are using select the columns we need, then we will filter all of the first visits. After that we will use rename() to keep both columns that only contain information from the first visit and from all six of them. Then we  remove the column "visit" with  select and lastly we are joining the two dataframes:
+
+```{r}
+new <- combined %>% select(ADOS, MullenRaw, ExpressiveLangRaw, Socialization, VISIT, SUBJ) %>% 
+            filter(., VISIT == 1) %>% 
+              rename(., ADOS1 = ADOS) %>% 
+              rename(., MullenRaw1 = MullenRaw) %>% 
+              rename(., ExpressiveLangRaw1 = ExpressiveLangRaw) %>% 
+              rename(., Socialization1 = Socialization) %>%
+            select(.,-starts_with("VISIT")) %>% 
+            right_join(combined, by = "SUBJ")
+```
+
+2g. Final touches
+
+We are going to anonymize our participants by changing the categories of the subject column to first being a factor. Then by making them numeric we will anonymize them and lastly by making them a factor again we have the variable as we want it: 
+
+```{r}
+new$SUBJ <- as.factor(new$SUBJ)
+new$SUBJ <- as.numeric(new$SUBJ)
+new$SUBJ <- as.factor(new$SUBJ)
+```
+
+Renaming the variables with two ifelse statements:
+
+```{r}
+new$Gender <- ifelse(new$Gender == 1, "M", "F")
+new$Diagnosis <- ifelse(new$Diagnosis == "A", "ASD", "TD")
+```
+
+
+3) BONUS QUESTIONS
+
+
+## 1) USING FILTER
+## List all kids who: 
+## 1. have a mean length of utterance (across all visits) of more than 2.7 morphemes.
+## 2. have a mean length of utterance of less than 1.5 morphemes at the first visit
+## 3. have not completed all trials. Tip: Use pipes to solve this
+
+```{r}
+new %>% filter(CHI_MLU > 2.7)
+new %>% filter(CHI_MLU < 1.5 & VISIT == 1)
+new %>% filter(VISIT == 6)
+```
+
+## USING ARRANGE
+## 1. Sort kids to find the kid who produced the most words on the 6th visit
+## 2. Sort kids to find the kid who produced the least amount of words on the 1st visit.
+
+```{r}
+new %>% filter(VISIT == 6) %>% arrange(desc(tokens_CHI))
+new %>% filter(VISIT == 1) %>% arrange(tokens_CHI
+```
+
+## USING SELECT
+## 1. Make a subset of the data including only kids with ASD, mlu and word tokens
+
+```{r}
+select_1 <- new %>% 
+  filter(Diagnosis == "ASD") %>% 
+  select(SUBJ, Diagnosis, MOT_MLU, CHI_MLU, tokens_MOT, tokens_CHI)
+```
+
+## 2. What happens if you include the name of a variable multiple times in a select() call?
+
+```{r}
+select_2 <- new %>% 
+  select(SUBJ, SUBJ)
+```
+
+
+## USING MUTATE, SUMMARISE and PIPES
+## 1. Add a column to the data set that represents the mean number of words spoken during all visits.
+
+```{r}
+new %>% mutate(mean = mean(tokens_CHI, na.rm = T))
+```
+
+## 2. Use the summarise function and pipes to add an column in the data set containing the mean amount of words produced by each trial across all visits. HINT: group by Child.ID 
+
+```{r}
+new %>% mutate(mean = mean(tokens_CHI, na.rm = T))
+```
+
+## 3. The solution to task above enables us to assess the average amount of words produced by each child. Why don't we just use these average values to describe the language production of the children? What is the advantage of keeping all the data?
+
+```{r}
+new %>% group_by(SUBJ) %>% mutate(mean = mean(tokens_CHI, na.rm = T)) 
+```
+
+
